@@ -10,6 +10,7 @@ use Raml\Method;
 use Raml\Parser;
 use Slim\Http\Request;
 use Slim\Http\Response;
+use Slim\Route;
 use Slim\Slim;
 
 
@@ -67,6 +68,9 @@ final class ZeroRouter
 	/** @var Slim */
 	private $app;
 
+	/** @var array */
+	private $slimRouteParams;
+
 	/** @var IAuthenticator */
 	private $authenticator;
 
@@ -121,6 +125,13 @@ final class ZeroRouter
 		return $this->app->container->get('response');
 	}
 
+	/**
+	 * @return array
+	 */
+	public function getSlimRouteParams()
+	{
+		return $this->slimRouteParams;
+	}
 
 	/**
 	 * @return bool
@@ -390,58 +401,86 @@ final class ZeroRouter
 			};
 		};
 
-		if ($this->app === null) {
-			$this->app = $this->createSlimApp();
-		}
+        if ($this->app === null) {
+            $this->app = $this->createSlimApp();
+        }
 
-		foreach ($apiDefinition->getResourcesAsUri()->getRoutes() as $route) {
+        // CORS preflight request handling
+        $request = $this->getRequest();
+        if (strtolower($request->getMethod()) === 'options' && isset($request->headers['Origin'])) {
+            $response = $this->getResponse();
 
-			/** @var Method $method */
-			$method = $route['method'];
-			$httpMethod = strtolower($method->getType());
+            $this->app->options(
+                $request->getResourceUri(),
 
-			//get,post,...
-			$this->app->$httpMethod(
+                //authenticate middleware
+                $authenticate($this->app),
 
-			//route path
-			/**
-			 * @throws RamlRuntimeException
-			 */
-				'/' . $apiStarts . '/' . $apiDefinition->getVersion() . $route['path'],
+                //last middleware - callback
+                function (array $slimRouteParams) use ($request, $response) {
+                    $response->headers->set('Access-Control-Allow-Origin', $request->headers['Origin']);
+                    $response->headers->set('Access-Control-Allow-Methods', 'POST, GET, PUT, DELETE, OPTIONS');
+                    $response->headers->set('Access-Control-Allow-Headers',
+                        'Content-Type, Origin, Client-Id, Authorization');
+                    $response->setStatus(\Nette\Http\Response::S200_OK);
 
-				//authenticate middleware
-				$authenticate($this->app),
+                    foreach ($this->onResponse as $callback) {
+                        $callback($request, $response);
+                    }
+                }
+            );
+        } else {
+            foreach ($apiDefinition->getResourcesAsUri()->getRoutes() as $route) {
 
-				//last middleware
-				function () use ($route) {
+                /** @var Method $method */
+                $method = $route['method'];
+                $httpMethod = strtolower($method->getType());
 
-					$request = $this->getRequest();
-					$response = $this->getResponse();
-					// API definitions are assumed to have this Content-Type for all content returned, if not set explicitly
-					$response->headers->set('Content-Type', 'application/json');
+                //get,post,...
+                $this->app->$httpMethod(
 
-					$handled = false;
+                //route path - pattern
+                /**
+                 * @throws RamlRuntimeException
+                 */
+                    '/' . $apiStarts . '/' . $apiDefinition->getVersion() . $route['path'],
 
-					foreach ($this->factories as $processorFactory) {
-						$processor = $processorFactory instanceof IProcessorFactory ? $processorFactory->create() : $processorFactory();
-						if ($handled = $processor->process($this, $request, $response, $route) === true) {
-							$response->headers['X-Raml-Processor'] = get_class($processorFactory);
-							break;
-						}
-					}
+                    //authenticate middleware
+                    $authenticate($this->app),
 
-					if ($handled === false) {
-						throw new RamlRuntimeException('No processor handled this API request.');
-					}
+                    //last middleware - callback
+                    function (array $slimRouteParams) use ($route) {
+                        $this->slimRouteParams = $slimRouteParams;
 
-					foreach ($this->onResponse as $callback) {
-						$callback($request, $response);
-					}
-				}
-			);
+                        $request = $this->getRequest();
+                        $response = $this->getResponse();
+                        // API definitions are assumed to have this Content-Type for all content returned, if not set explicitly
+                        $response->headers->set('Content-Type', 'application/json');
 
-		}
-	}
+                        $handled = false;
+                        foreach ($this->factories as $processorFactory) {
+                            $processor = $processorFactory instanceof IProcessorFactory ? $processorFactory->create() : $processorFactory();
+                            if ($handled = $processor->process($this, $request, $response, $route) === true) {
+                                $response->headers['X-Raml-Processor'] = get_class($processorFactory);
+                                if (isset($request->headers['Origin'])) {
+                                    $response->headers->set('Access-Control-Allow-Origin', $request->headers['Origin']);
+                                }
+                                break;
+                            }
+                        }
+
+                        if ($handled === false) {
+                            throw new RamlRuntimeException('No processor handled this API request.');
+                        }
+
+                        foreach ($this->onResponse as $callback) {
+                            $callback($request, $response);
+                        }
+                    }
+                );
+            }
+        }
+    }
 
 
 	/**

@@ -16,6 +16,6 @@ $loader->addDirectory(APPLICATION_PATH . '/src');
 $loader->addDirectory(APPLICATION_PATH . '/tests');
 
 //$loader->addDirectory(APPLICATION_PATH . '/controllers');
-$loader->setCacheStorage(new Nette\Caching\Storages\FileStorage(__DIR__ . '/temp'));
+$loader->setTempDirectory(new Nette\Caching\Storages\FileStorage(__DIR__ . '/temp'));
 $loader->register();
 

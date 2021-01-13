@@ -10,7 +10,7 @@ require APPLICATION_PATH . '/vendor/autoload.php';
 $loader = new Nette\Loaders\RobotLoader;
 $loader->addDirectory(APPLICATION_PATH . '/src');
 $loader->addDirectory(APPLICATION_PATH . '/controllers');
-$loader->setCacheStorage(new Nette\Caching\Storages\FileStorage(APPLICATION_PATH . '/temp'));
+$loader->setTempDirectory(new Nette\Caching\Storages\FileStorage(APPLICATION_PATH . '/temp'));
 $loader->register();
 
 
