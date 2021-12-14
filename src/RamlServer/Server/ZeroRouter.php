@@ -419,7 +419,7 @@ final class ZeroRouter
                 //last middleware - callback
                 function (array $slimRouteParams) use ($request, $response) {
                     $response->headers->set('Access-Control-Allow-Origin', $request->headers['Origin']);
-                    $response->headers->set('Access-Control-Allow-Methods', 'POST, GET, PUT, DELETE, OPTIONS');
+                    $response->headers->set('Access-Control-Allow-Methods', 'PATCH, POST, GET, PUT, DELETE, OPTIONS');
                     $response->headers->set('Access-Control-Allow-Headers',
                         'Content-Type, Origin, Client-Id, Authorization');
                     $response->setStatus(\Nette\Http\Response::S200_OK);
